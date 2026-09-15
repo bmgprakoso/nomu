@@ -1,0 +1,84 @@
+import { getGuidelineForAge, getLatestWeight, getTodayTotalMl } from "../db/queries.js";
+
+const STALE_WEIGHT_DAYS = 21;
+
+export interface IntakeStatus {
+  todayTotalMl: number;
+  targetLowMl: number | null;
+  targetHighMl: number | null;
+  staleWeight: boolean;
+  noWeightOnFile: boolean;
+  noGuidelineForAge: boolean;
+}
+
+export function ageDaysFromBirthDate(birthDate: string, now: Date = new Date()): number {
+  const birth = new Date(birthDate);
+  return Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export async function computeIntakeStatus(babyId: string, birthDate: string, now: Date = new Date()): Promise<IntakeStatus> {
+  const todayTotalMl = await getTodayTotalMl(babyId);
+  const latestWeight = await getLatestWeight(babyId);
+
+  if (!latestWeight) {
+    return {
+      todayTotalMl,
+      targetLowMl: null,
+      targetHighMl: null,
+      staleWeight: false,
+      noWeightOnFile: true,
+      noGuidelineForAge: false,
+    };
+  }
+
+  const ageDays = ageDaysFromBirthDate(birthDate, now);
+  const guideline = await getGuidelineForAge(ageDays);
+
+  if (!guideline) {
+    return {
+      todayTotalMl,
+      targetLowMl: null,
+      targetHighMl: null,
+      staleWeight: false,
+      noWeightOnFile: false,
+      noGuidelineForAge: true,
+    };
+  }
+
+  const weightKg = Number(latestWeight.weight_kg);
+  const measuredAt = new Date(latestWeight.measured_at);
+  const daysSinceWeighed = (now.getTime() - measuredAt.getTime()) / (1000 * 60 * 60 * 24);
+
+  return {
+    todayTotalMl,
+    targetLowMl: weightKg * Number(guideline.ml_per_kg_low),
+    targetHighMl: weightKg * Number(guideline.ml_per_kg_high),
+    staleWeight: daysSinceWeighed > STALE_WEIGHT_DAYS,
+    noWeightOnFile: false,
+    noGuidelineForAge: false,
+  };
+}
+
+export function formatIntakeStatus(status: IntakeStatus): string {
+  const lines: string[] = [];
+
+  if (status.noWeightOnFile) {
+    lines.push(`Logged ${status.todayTotalMl}ml today. Log a weight (e.g. "4.2kg") to see a target range.`);
+    return lines.join("\n");
+  }
+
+  if (status.noGuidelineForAge) {
+    lines.push(`Logged ${status.todayTotalMl}ml today. No guideline range for this age yet.`);
+    return lines.join("\n");
+  }
+
+  const low = Math.round(status.targetLowMl!);
+  const high = Math.round(status.targetHighMl!);
+  lines.push(`Today: ${status.todayTotalMl}ml / target ${low}-${high}ml`);
+
+  if (status.staleWeight) {
+    lines.push(`(last weight is over ${STALE_WEIGHT_DAYS} days old — target may be off, consider re-weighing)`);
+  }
+
+  return lines.join("\n");
+}
