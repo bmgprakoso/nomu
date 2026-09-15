@@ -22,8 +22,7 @@ export async function findCaregiverByChatId(chatId: string): Promise<Caregiver |
   return rows[0] ?? null;
 }
 
-// Personal-use assumption: one baby per caregiver (see tech-doc.md open decisions
-// re: multi-baby disambiguation). Returns the first linked baby.
+// Personal-use assumption: one baby per caregiver. Returns the first linked baby.
 export async function findBabyForCaregiver(caregiverId: string): Promise<Baby | null> {
   const { rows } = await pool.query<Baby>(
     `SELECT b.id, b.name, b.birth_date, b.sex
