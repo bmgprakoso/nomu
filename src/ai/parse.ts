@@ -3,7 +3,7 @@ import { nowIsoWithOffset } from "../lib/time.js";
 
 const anthropic = new Anthropic();
 
-export type Intent = "feed" | "weight" | "query" | "unknown";
+export type Intent = "feed" | "weight" | "query" | "list" | "undo" | "unknown";
 export type FeedType = "formula" | "breast_milk" | "breastfeeding" | null;
 
 export interface ParsedMessage {
@@ -12,6 +12,9 @@ export interface ParsedMessage {
   unit: "ml" | "oz" | null;
   feed_type: FeedType;
   time_iso: string | null;
+  repeat_count: number | null;
+  repeat_interval_minutes: number | null;
+  undo_count: number | null;
   weight_kg: number | null;
   confidence: "high" | "low";
 }
@@ -21,16 +24,22 @@ const LB_TO_KG = 0.453592;
 
 function buildSystemPrompt(nowIsoWithOffsetStr: string): string {
   return `You extract structured data from a caregiver's WhatsApp-style message about a
-baby's feeding or weight. The current date and time, including the caregiver's UTC
-offset, is ${nowIsoWithOffsetStr}.
+baby's feeding or weight. Messages may be in English, Indonesian, or a mix
+("asi" = breast milk, "asupan" = intake, "hapus"/"undo" = delete, "entri" =
+entries, "sebelum ini" = before this/previous, "hari ini" = today). The
+current date and time, including the caregiver's UTC offset, is
+${nowIsoWithOffsetStr}.
 Respond with ONLY raw JSON, no markdown fences, no explanation, matching exactly:
 
 {
-  "intent": "feed" | "weight" | "query" | "unknown",
+  "intent": "feed" | "weight" | "query" | "list" | "undo" | "unknown",
   "amount": number|null,
   "unit": "ml"|"oz"|null,
   "feed_type": "formula"|"breast_milk"|"breastfeeding"|null,
   "time_iso": string|null,
+  "repeat_count": number|null,
+  "repeat_interval_minutes": number|null,
+  "undo_count": number|null,
   "weight_kg": number|null,
   "confidence": "high"|"low"
 }
@@ -41,7 +50,24 @@ Rules:
   shown above (e.g. "2026-09-15T13:00:00+07:00") — do not convert to UTC/Z
   yourself, just carry the offset through unchanged.
 - Convert lb to kg if given (1 lb = ${LB_TO_KG} kg).
-- "how am I doing" / "today?" / "stats" -> intent "query".
+- "asi" with an explicit volume (e.g. "70ml asi") means pumped/bottled breast
+  milk -> feed_type "breast_milk". Only use "breastfeeding" for direct
+  nursing with no measurable volume.
+- Multiple repeated feeds (e.g. "70ml asi 3x setiap 2 jam ke depan", "50ml
+  formula x4 every 3 hours"): set intent "feed", repeat_count to the number
+  of repeats, repeat_interval_minutes to the interval in minutes, and
+  time_iso to when the FIRST one occurs (use the current time above if the
+  caregiver says "starting now" / "ke depan" / gives no explicit start).
+  For a single, non-repeated feed, leave repeat_count and
+  repeat_interval_minutes null.
+- Requests to delete recent entries (e.g. "undo", "hapus 3 entri sebelum
+  ini", "delete last 2 entries"): set intent "undo" and undo_count to how
+  many of the caregiver's own most recent entries to remove (default 1 if
+  the caregiver doesn't specify a number).
+- Requests to list today's feeds (e.g. "list asupan hari ini", "list
+  today", "show today's feeds"): set intent "list".
+- "how am I doing" / "today?" / "stats" -> intent "query" (a totals summary,
+  distinct from "list" which is an itemized log).
 - If ambiguous or low confidence, use intent "unknown", confidence "low" -
   reply asking the caregiver to clarify rather than guessing.`;
 }
@@ -80,6 +106,9 @@ function unknownResult(): ParsedMessage {
     unit: null,
     feed_type: null,
     time_iso: null,
+    repeat_count: null,
+    repeat_interval_minutes: null,
+    undo_count: null,
     weight_kg: null,
     confidence: "low",
   };

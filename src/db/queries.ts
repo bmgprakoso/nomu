@@ -139,6 +139,27 @@ export async function getGuidelineForAge(ageDays: number) {
   return rows[0] ?? null;
 }
 
+export interface TodayFeed {
+  amount_ml: string | null;
+  feed_type: string;
+  started_at: string;
+  caregiver_name: string | null;
+}
+
+export async function getTodayFeeds(babyId: string): Promise<TodayFeed[]> {
+  const { startUtc, endUtc } = localDayBoundsUtc();
+  const { rows } = await pool.query<TodayFeed>(
+    `SELECT f.amount_ml, f.feed_type, f.started_at, c.name AS caregiver_name
+     FROM feeds f
+     LEFT JOIN caregivers c ON c.id = f.logged_by
+     WHERE f.baby_id = $1
+       AND f.started_at >= $2 AND f.started_at < $3
+     ORDER BY f.started_at ASC`,
+    [babyId, startUtc, endUtc],
+  );
+  return rows;
+}
+
 export async function getTodayTotalMl(babyId: string) {
   const { startUtc, endUtc } = localDayBoundsUtc();
   const { rows } = await pool.query<{ total: string | null }>(
