@@ -11,29 +11,30 @@ import {
   insertFeed,
   insertWeight,
 } from "../db/queries.js";
+import { describeFeedType, escapeHtml, feedTypeTableLabel, padTable } from "../lib/format.js";
 import { computeIntakeStatus, formatIntakeStatus } from "../lib/intake.js";
 import { isRateLimited } from "../lib/rateLimit.js";
-import { formatInAppTz } from "../lib/time.js";
+import { formatInAppTz, formatTimeOnlyInAppTz } from "../lib/time.js";
 
 const CLARIFY_REPLY =
-  "Sorry, I didn't catch that. Try something like \"120ml formula 8am\" or \"4.2kg\".";
+  '❓ Sorry, I didn\'t catch that. Try something like <code>120ml formula 8am</code> or <code>4.2kg</code>.';
 const UNDO_WORDS = new Set(["undo", "oops"]);
 const MAX_REPEAT = 20;
 const MAX_UNDO = 20;
 
 export async function handleIncomingMessage(chatId: string, rawText: string): Promise<string> {
   if (isRateLimited(chatId)) {
-    return "Slow down a bit — please wait a moment before sending more messages.";
+    return "⏳ Slow down a bit — please wait a moment before sending more messages.";
   }
 
   const caregiver = await findCaregiverByChatId(chatId);
   if (!caregiver) {
-    return `This chat isn't registered as a caregiver yet. Your chat ID is ${chatId} — ask the family admin to add you.`;
+    return `🔒 This chat isn't registered as a caregiver yet.\nYour chat ID is <code>${escapeHtml(chatId)}</code> — ask the family admin to add you.`;
   }
 
   const baby = await findBabyForCaregiver(caregiver.id);
   if (!baby) {
-    return "No baby is linked to your account yet.";
+    return "👶 No baby is linked to your account yet.";
   }
 
   if (UNDO_WORDS.has(rawText.trim().toLowerCase())) {
@@ -82,7 +83,7 @@ async function handleFeed(
   const repeatCount = Math.min(MAX_REPEAT, Math.max(1, parsed.repeat_count ?? 1));
 
   if (repeatCount > 1 && (!parsed.repeat_interval_minutes || parsed.repeat_interval_minutes <= 0)) {
-    return 'I understood multiple feeds but not the interval between them — try "70ml asi 3x setiap 2 jam".';
+    return '❓ I understood multiple feeds but not the interval between them — try <code>70ml asi 3x setiap 2 jam</code>.';
   }
 
   const intervalMinutes = parsed.repeat_interval_minutes ?? 0;
@@ -104,21 +105,22 @@ async function handleFeed(
   }
 
   if (isDirectBreastfeeding) {
-    return "Logged breastfeeding session. (Direct breastfeeding isn't volume-tracked — target range only applies to bottle/formula/pumped feeds.)";
+    return "🤱 Logged breastfeeding session.\n<i>Direct breastfeeding isn't volume-tracked — target range only applies to bottle/formula/pumped feeds.</i>";
   }
 
   const status = await computeIntakeStatus(babyId, birthDate);
+  const statsBlock = `<pre>${escapeHtml(formatIntakeStatus(status))}</pre>`;
 
   if (repeatCount === 1) {
-    return `Logged ${Math.round(amountMl!)}ml ${feedType}.\n${formatIntakeStatus(status)}`;
+    return `✅ Logged <b>${Math.round(amountMl!)}ml</b> ${describeFeedType(feedType)}\n\n${statsBlock}`;
   }
 
   const timesStr = timestamps.map((t) => formatInAppTz(t)).join(", ");
   const hasFuture = timestamps[timestamps.length - 1].getTime() > Date.now();
   const futureNote = hasFuture
-    ? "\n(Some of these are scheduled later today — today's total already includes them.)"
+    ? "\n<i>Some of these are scheduled later today — today's total already includes them.</i>"
     : "";
-  return `Logged ${repeatCount}x ${Math.round(amountMl!)}ml ${feedType} at ${timesStr}.${futureNote}\n${formatIntakeStatus(status)}`;
+  return `✅ Logged <b>${repeatCount}x ${Math.round(amountMl!)}ml</b> ${describeFeedType(feedType)}\nat ${timesStr}${futureNote}\n\n${statsBlock}`;
 }
 
 async function handleWeight(
@@ -139,7 +141,7 @@ async function handleWeight(
     loggedBy: caregiverId,
   });
 
-  return `Logged weight: ${parsed.weight_kg}kg. Note: general guideline numbers, not medical advice — always defer to your pediatrician.`;
+  return `⚖️ Logged weight: <b>${parsed.weight_kg}kg</b>\n<i>General guideline numbers, not medical advice — always defer to your pediatrician.</i>`;
 }
 
 async function handleUndo(caregiverId: string, babyId: string, requestedCount: number): Promise<string> {
@@ -159,18 +161,18 @@ async function handleUndo(caregiverId: string, babyId: string, requestedCount: n
     if (feedIsNewer && feed) {
       await deleteFeed(feed.id);
       const amountPart = feed.amount_ml ? `${Math.round(Number(feed.amount_ml))}ml ` : "";
-      removed.push(`${amountPart}${feed.feed_type} @ ${formatInAppTz(feed.started_at)}`);
+      removed.push(`${amountPart}${describeFeedType(feed.feed_type)} @ ${formatInAppTz(feed.started_at)}`);
     } else if (weight) {
       await deleteWeight(weight.id);
-      removed.push(`weight ${weight.weight_kg}kg @ ${formatInAppTz(weight.measured_at)}`);
+      removed.push(`⚖️ ${weight.weight_kg}kg @ ${formatInAppTz(weight.measured_at)}`);
     }
   }
 
   if (removed.length === 0) {
-    return "Nothing to undo — you haven't logged anything yet.";
+    return "🤷 Nothing to undo — you haven't logged anything yet.";
   }
 
-  return `Undone (${removed.length}):\n${removed.map((r) => `- ${r}`).join("\n")}`;
+  return `🗑️ <b>Undone (${removed.length}):</b>\n${removed.map((r) => `• ${r}`).join("\n")}`;
 }
 
 async function handleStats(babyId: string, birthDate: string): Promise<string> {
@@ -178,19 +180,24 @@ async function handleStats(babyId: string, birthDate: string): Promise<string> {
   const lastFeed = await getLastFeedTime(babyId);
   const feeds = await getTodayFeeds(babyId);
 
-  const lines = [
-    formatIntakeStatus(status),
-    lastFeed ? `Last feed: ${formatInAppTz(lastFeed)}` : "No feeds logged yet.",
+  const lastFeedLine = lastFeed
+    ? `Last feed: ${formatInAppTz(lastFeed)}`
+    : "No feeds logged yet.";
+
+  const parts = [
+    `📊 <b>Today's Stats</b>\n<pre>${escapeHtml(formatIntakeStatus(status))}</pre>`,
+    lastFeedLine,
   ];
 
   if (feeds.length > 0) {
-    lines.push("", `Today's feeds (${feeds.length}):`);
-    for (const f of feeds) {
-      const amountPart = f.amount_ml ? `${Math.round(Number(f.amount_ml))}ml ` : "";
-      const who = f.caregiver_name ? ` (${f.caregiver_name})` : "";
-      lines.push(`${formatInAppTz(f.started_at)} — ${amountPart}${f.feed_type}${who}`);
-    }
+    const rows = feeds.map((f) => [
+      formatTimeOnlyInAppTz(f.started_at),
+      `${f.amount_ml ? `${Math.round(Number(f.amount_ml))}ml ` : ""}${feedTypeTableLabel(f.feed_type)}`,
+      f.caregiver_name ?? "-",
+    ]);
+    const table = padTable(rows, ["Time", "Feed", "By"]);
+    parts.push(`🍼 <b>Today's feeds (${feeds.length})</b>\n<pre>${escapeHtml(table)}</pre>`);
   }
 
-  return lines.join("\n");
+  return parts.join("\n\n");
 }

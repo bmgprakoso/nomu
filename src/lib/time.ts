@@ -40,6 +40,12 @@ export function formatInAppTz(date: Date | string, timeZone: string = APP_TIMEZO
   return d.toLocaleString("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" });
 }
 
+// HH:mm only, for table rows where the date is already implied (e.g. "today's feeds").
+export function formatTimeOnlyInAppTz(date: Date | string, timeZone: string = APP_TIMEZONE): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleString("en-US", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
 // Day boundary for "today's total" queries, expressed as a UTC instant range,
 // so it matches the caregiver's local day rather than the DB server's timezone.
 export function localDayBoundsUtc(timeZone: string = APP_TIMEZONE, now: Date = new Date()): { startUtc: string; endUtc: string } {

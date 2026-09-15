@@ -59,25 +59,27 @@ export async function computeIntakeStatus(babyId: string, birthDate: string, now
   };
 }
 
+// Plain aligned text meant to be wrapped in an HTML <pre> block by the caller
+// (Telegram monospace) — no emoji here, since variable-width glyphs break
+// column alignment.
 export function formatIntakeStatus(status: IntakeStatus): string {
-  const lines: string[] = [];
-
   if (status.noWeightOnFile) {
-    lines.push(`Logged ${status.todayTotalMl}ml today. Log a weight (e.g. "4.2kg") to see a target range.`);
-    return lines.join("\n");
+    return `Today   : ${status.todayTotalMl}ml\n(no weight on file — log one, e.g. "4.2kg", to see a target range)`;
   }
 
   if (status.noGuidelineForAge) {
-    lines.push(`Logged ${status.todayTotalMl}ml today. No guideline range for this age yet.`);
-    return lines.join("\n");
+    return `Today   : ${status.todayTotalMl}ml\n(no guideline range for this age yet)`;
   }
 
   const low = Math.round(status.targetLowMl!);
   const high = Math.round(status.targetHighMl!);
-  lines.push(`Today: ${status.todayTotalMl}ml / target ${low}-${high}ml`);
+  const lines = [
+    `Today   : ${status.todayTotalMl}ml`,
+    `Target  : ${low}-${high}ml`,
+  ];
 
   if (status.staleWeight) {
-    lines.push(`(last weight is over ${STALE_WEIGHT_DAYS} days old — target may be off, consider re-weighing)`);
+    lines.push(`(!) last weight is over ${STALE_WEIGHT_DAYS} days old — target may be off`);
   }
 
   return lines.join("\n");

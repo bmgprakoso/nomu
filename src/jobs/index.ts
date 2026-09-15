@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { sendTelegramMessage } from "../telegram/client.js";
 import { getAllBabyIds, getCaregiversForBaby, getLastFeedTime } from "../db/queries.js";
 import { pool } from "../db/pool.js";
+import { escapeHtml } from "../lib/format.js";
 import { computeIntakeStatus, formatIntakeStatus } from "../lib/intake.js";
 import { formatInAppTz } from "../lib/time.js";
 
@@ -22,7 +23,7 @@ async function runDailyDigest() {
     const birthDate = await getBirthDate(babyId);
     const status = await computeIntakeStatus(babyId, birthDate);
     const caregivers = await getCaregiversForBaby(babyId);
-    const message = `Daily digest\n${formatIntakeStatus(status)}`;
+    const message = `🌙 <b>Daily Digest</b>\n<pre>${escapeHtml(formatIntakeStatus(status))}</pre>`;
 
     for (const caregiver of caregivers) {
       await sendTelegramMessage(caregiver.telegram_chat_id, message).catch((err) =>
@@ -44,8 +45,8 @@ async function runInactivityCheck() {
 
     const caregivers = await getCaregiversForBaby(babyId);
     const message = lastFeed
-      ? `No feed logged in over ${NUDGE_THRESHOLD_HOURS}h (last: ${formatInAppTz(lastFeed)}).`
-      : `No feeds logged yet for this baby.`;
+      ? `⏰ No feed logged in over ${NUDGE_THRESHOLD_HOURS}h (last: ${formatInAppTz(lastFeed)}).`
+      : `⏰ No feeds logged yet for this baby.`;
 
     for (const caregiver of caregivers) {
       await sendTelegramMessage(caregiver.telegram_chat_id, message).catch((err) =>
