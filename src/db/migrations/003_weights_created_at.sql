@@ -1,0 +1,1 @@
+ALTER TABLE weights ADD COLUMN created_at TIMESTAMPTZ DEFAULT now();

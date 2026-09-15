@@ -198,12 +198,12 @@ Test number caps at 5 recipients — fine for a family. Going beyond that (verif
 
 ## 7. Open decisions / TODO before building
 
-- [ ] Pick Node/Express vs Python/FastAPI for the webhook server
-- [ ] Decide phone-number-as-identity vs a lightweight account layer
+- [x] Pick Node/Express vs Python/FastAPI for the webhook server — Node/Express/TypeScript
+- [x] Decide phone-number-as-identity vs a lightweight account layer — Telegram `chat_id`-as-identity (post-pivot equivalent)
 - [ ] Confirm intake guideline numbers with pediatrician before hardcoding into `intake_guidelines`
-- [ ] Decide how "undo last entry" / correction flow should work
-- [ ] Rate-limit the webhook (Claude API call runs per inbound message)
-- [ ] Decide daily digest time and inactivity-nudge threshold
+- [x] Decide how "undo last entry" / correction flow should work — caregiver texts "undo"/"oops", deletes their own most recent feed or weight entry immediately, no confirmation step
+- [x] Rate-limit the message handler (Claude API call runs per inbound message) — 10 msgs/min per caregiver, in-memory sliding window (`RATE_LIMIT_PER_MINUTE`)
+- [x] Decide daily digest time and inactivity-nudge threshold — defaults 20:00 local, 6h since last feed; configurable via `DIGEST_TIME` / `NUDGE_THRESHOLD_HOURS`
 
 ## 8. Suggested build order
 

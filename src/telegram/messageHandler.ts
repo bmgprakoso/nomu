@@ -1,18 +1,28 @@
 import { amountToMl, parseMessage } from "../ai/parse.js";
 import {
+  deleteFeed,
+  deleteWeight,
   findBabyForCaregiver,
   findCaregiverByChatId,
   getLastFeedTime,
+  getMostRecentFeedByCaregiver,
+  getMostRecentWeightByCaregiver,
   insertFeed,
   insertWeight,
 } from "../db/queries.js";
 import { computeIntakeStatus, formatIntakeStatus } from "../lib/intake.js";
+import { isRateLimited } from "../lib/rateLimit.js";
 import { formatInAppTz } from "../lib/time.js";
 
 const CLARIFY_REPLY =
   "Sorry, I didn't catch that. Try something like \"120ml formula 8am\" or \"4.2kg\".";
+const UNDO_WORDS = new Set(["undo", "oops"]);
 
 export async function handleIncomingMessage(chatId: string, rawText: string): Promise<string> {
+  if (isRateLimited(chatId)) {
+    return "Slow down a bit — please wait a moment before sending more messages.";
+  }
+
   const caregiver = await findCaregiverByChatId(chatId);
   if (!caregiver) {
     return `This chat isn't registered as a caregiver yet. Your chat ID is ${chatId} — ask the family admin to add you.`;
@@ -21,6 +31,10 @@ export async function handleIncomingMessage(chatId: string, rawText: string): Pr
   const baby = await findBabyForCaregiver(caregiver.id);
   if (!baby) {
     return "No baby is linked to your account yet.";
+  }
+
+  if (UNDO_WORDS.has(rawText.trim().toLowerCase())) {
+    return handleUndo(caregiver.id, baby.id);
   }
 
   const parsed = await parseMessage(rawText);
@@ -98,6 +112,32 @@ async function handleWeight(
   });
 
   return `Logged weight: ${parsed.weight_kg}kg. Note: general guideline numbers, not medical advice — always defer to your pediatrician.`;
+}
+
+async function handleUndo(caregiverId: string, babyId: string): Promise<string> {
+  const [feed, weight] = await Promise.all([
+    getMostRecentFeedByCaregiver(caregiverId, babyId),
+    getMostRecentWeightByCaregiver(caregiverId, babyId),
+  ]);
+
+  if (!feed && !weight) {
+    return "Nothing to undo — you haven't logged anything yet.";
+  }
+
+  const feedIsNewer = feed && (!weight || new Date(feed.created_at) > new Date(weight.created_at));
+
+  if (feedIsNewer && feed) {
+    await deleteFeed(feed.id);
+    const amountPart = feed.amount_ml ? `${Math.round(Number(feed.amount_ml))}ml ` : "";
+    return `Undone: removed ${amountPart}${feed.feed_type} logged at ${formatInAppTz(feed.started_at)}.`;
+  }
+
+  if (weight) {
+    await deleteWeight(weight.id);
+    return `Undone: removed weight entry ${weight.weight_kg}kg logged at ${formatInAppTz(weight.measured_at)}.`;
+  }
+
+  return "Nothing to undo — you haven't logged anything yet.";
 }
 
 async function handleQuery(babyId: string, birthDate: string): Promise<string> {

@@ -77,6 +77,49 @@ export async function insertWeight(params: {
   return rows[0].id as string;
 }
 
+export interface RecentFeed {
+  id: string;
+  amount_ml: string | null;
+  feed_type: string;
+  started_at: string;
+  created_at: string;
+}
+
+export interface RecentWeight {
+  id: string;
+  weight_kg: string;
+  measured_at: string;
+  created_at: string;
+}
+
+export async function getMostRecentFeedByCaregiver(caregiverId: string, babyId: string): Promise<RecentFeed | null> {
+  const { rows } = await pool.query<RecentFeed>(
+    `SELECT id, amount_ml, feed_type, started_at, created_at FROM feeds
+     WHERE baby_id = $1 AND logged_by = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [babyId, caregiverId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function getMostRecentWeightByCaregiver(caregiverId: string, babyId: string): Promise<RecentWeight | null> {
+  const { rows } = await pool.query<RecentWeight>(
+    `SELECT id, weight_kg, measured_at, created_at FROM weights
+     WHERE baby_id = $1 AND logged_by = $2
+     ORDER BY created_at DESC LIMIT 1`,
+    [babyId, caregiverId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function deleteFeed(id: string): Promise<void> {
+  await pool.query("DELETE FROM feeds WHERE id = $1", [id]);
+}
+
+export async function deleteWeight(id: string): Promise<void> {
+  await pool.query("DELETE FROM weights WHERE id = $1", [id]);
+}
+
 export async function getLatestWeight(babyId: string) {
   const { rows } = await pool.query<{ weight_kg: string; measured_at: string }>(
     `SELECT weight_kg, measured_at FROM weights
