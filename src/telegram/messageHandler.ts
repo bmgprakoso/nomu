@@ -51,10 +51,8 @@ export async function handleIncomingMessage(chatId: string, rawText: string): Pr
       return handleFeed(caregiver.id, baby.id, baby.birth_date, rawText, parsed);
     case "weight":
       return handleWeight(caregiver.id, baby.id, rawText, parsed);
-    case "query":
-      return handleQuery(baby.id, baby.birth_date);
-    case "list":
-      return handleList(baby.id);
+    case "stats":
+      return handleStats(baby.id, baby.birth_date);
     case "undo":
       return handleUndo(caregiver.id, baby.id, parsed.undo_count ?? 1);
     default:
@@ -175,27 +173,24 @@ async function handleUndo(caregiverId: string, babyId: string, requestedCount: n
   return `Undone (${removed.length}):\n${removed.map((r) => `- ${r}`).join("\n")}`;
 }
 
-async function handleList(babyId: string): Promise<string> {
-  const feeds = await getTodayFeeds(babyId);
-  if (feeds.length === 0) {
-    return "No feeds logged today yet.";
-  }
-
-  const lines = feeds.map((f) => {
-    const amountPart = f.amount_ml ? `${Math.round(Number(f.amount_ml))}ml ` : "";
-    const who = f.caregiver_name ? ` (${f.caregiver_name})` : "";
-    return `${formatInAppTz(f.started_at)} — ${amountPart}${f.feed_type}${who}`;
-  });
-
-  return `Today's feeds (${feeds.length}):\n${lines.join("\n")}`;
-}
-
-async function handleQuery(babyId: string, birthDate: string): Promise<string> {
+async function handleStats(babyId: string, birthDate: string): Promise<string> {
   const status = await computeIntakeStatus(babyId, birthDate);
   const lastFeed = await getLastFeedTime(babyId);
-  const lastFeedLine = lastFeed
-    ? `Last feed: ${formatInAppTz(lastFeed)}`
-    : "No feeds logged yet.";
+  const feeds = await getTodayFeeds(babyId);
 
-  return `${formatIntakeStatus(status)}\n${lastFeedLine}`;
+  const lines = [
+    formatIntakeStatus(status),
+    lastFeed ? `Last feed: ${formatInAppTz(lastFeed)}` : "No feeds logged yet.",
+  ];
+
+  if (feeds.length > 0) {
+    lines.push("", `Today's feeds (${feeds.length}):`);
+    for (const f of feeds) {
+      const amountPart = f.amount_ml ? `${Math.round(Number(f.amount_ml))}ml ` : "";
+      const who = f.caregiver_name ? ` (${f.caregiver_name})` : "";
+      lines.push(`${formatInAppTz(f.started_at)} — ${amountPart}${f.feed_type}${who}`);
+    }
+  }
+
+  return lines.join("\n");
 }

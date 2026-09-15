@@ -3,7 +3,7 @@ import { nowIsoWithOffset } from "../lib/time.js";
 
 const anthropic = new Anthropic();
 
-export type Intent = "feed" | "weight" | "query" | "list" | "undo" | "unknown";
+export type Intent = "feed" | "weight" | "stats" | "undo" | "unknown";
 export type FeedType = "formula" | "breast_milk" | "breastfeeding" | null;
 
 export interface ParsedMessage {
@@ -32,7 +32,7 @@ ${nowIsoWithOffsetStr}.
 Respond with ONLY raw JSON, no markdown fences, no explanation, matching exactly:
 
 {
-  "intent": "feed" | "weight" | "query" | "list" | "undo" | "unknown",
+  "intent": "feed" | "weight" | "stats" | "undo" | "unknown",
   "amount": number|null,
   "unit": "ml"|"oz"|null,
   "feed_type": "formula"|"breast_milk"|"breastfeeding"|null,
@@ -64,10 +64,9 @@ Rules:
   ini", "delete last 2 entries"): set intent "undo" and undo_count to how
   many of the caregiver's own most recent entries to remove (default 1 if
   the caregiver doesn't specify a number).
-- Requests to list today's feeds (e.g. "list asupan hari ini", "list
-  today", "show today's feeds"): set intent "list".
-- "how am I doing" / "today?" / "stats" -> intent "query" (a totals summary,
-  distinct from "list" which is an itemized log).
+- "how am I doing" / "today?" / "stats" / "list asupan hari ini" / "list
+  today" / "show today's feeds" -> intent "stats" (returns both the totals
+  summary and an itemized log of today's feeds together).
 - If ambiguous or low confidence, use intent "unknown", confidence "low" -
   reply asking the caregiver to clarify rather than guessing.`;
 }
