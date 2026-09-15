@@ -1,5 +1,7 @@
 # Baby feed tracker (WhatsApp) — tech doc - Nomu
 
+> **Update:** pivoted from WhatsApp (Meta Cloud API) to **Telegram**. Meta's Cloud API requires business verification even at hobby scale, and new/unverified WhatsApp Business Accounts were silently dropping messages (accepted by the API, never delivered) with no error surfaced — a dead end for a personal project. Telegram bots have no such review process and support long polling, so no public webhook URL is needed either. Sections below describe the original WhatsApp design; the parsing (§4), schema (§3, modulo `phone_number` → `telegram_chat_id`), and intake calculation (§5) carried over unchanged. See `README.md` for the current Telegram setup.
+
 Personal project. A caregiver texts a WhatsApp number in free text ("120ml formula 8am"), the bot parses it, logs it, and tracks daily intake against a weight-and-age-based target. Multiple caregivers (parents, nanny) can log against the same baby.
 
 ---

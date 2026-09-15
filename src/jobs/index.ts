@@ -1,8 +1,9 @@
 import cron from "node-cron";
-import { sendWhatsAppMessage } from "../whatsapp/client.js";
+import { sendTelegramMessage } from "../telegram/client.js";
 import { getAllBabyIds, getCaregiversForBaby, getLastFeedTime } from "../db/queries.js";
 import { pool } from "../db/pool.js";
 import { computeIntakeStatus, formatIntakeStatus } from "../lib/intake.js";
+import { formatInAppTz } from "../lib/time.js";
 
 const NUDGE_THRESHOLD_HOURS = Number(process.env.NUDGE_THRESHOLD_HOURS ?? 6);
 const DIGEST_TIME = process.env.DIGEST_TIME ?? "20:00"; // HH:mm, server local time
@@ -24,8 +25,8 @@ async function runDailyDigest() {
     const message = `Daily digest\n${formatIntakeStatus(status)}`;
 
     for (const caregiver of caregivers) {
-      await sendWhatsAppMessage(caregiver.phone_number, message).catch((err) =>
-        console.error(`digest send failed for ${caregiver.phone_number}:`, err),
+      await sendTelegramMessage(caregiver.telegram_chat_id, message).catch((err) =>
+        console.error(`digest send failed for ${caregiver.telegram_chat_id}:`, err),
       );
     }
   }
@@ -43,12 +44,12 @@ async function runInactivityCheck() {
 
     const caregivers = await getCaregiversForBaby(babyId);
     const message = lastFeed
-      ? `No feed logged in over ${NUDGE_THRESHOLD_HOURS}h (last: ${new Date(lastFeed).toLocaleString()}).`
+      ? `No feed logged in over ${NUDGE_THRESHOLD_HOURS}h (last: ${formatInAppTz(lastFeed)}).`
       : `No feeds logged yet for this baby.`;
 
     for (const caregiver of caregivers) {
-      await sendWhatsAppMessage(caregiver.phone_number, message).catch((err) =>
-        console.error(`nudge send failed for ${caregiver.phone_number}:`, err),
+      await sendTelegramMessage(caregiver.telegram_chat_id, message).catch((err) =>
+        console.error(`nudge send failed for ${caregiver.telegram_chat_id}:`, err),
       );
     }
   }

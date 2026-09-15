@@ -1,20 +1,21 @@
 import { amountToMl, parseMessage } from "../ai/parse.js";
 import {
   findBabyForCaregiver,
-  findCaregiverByPhone,
+  findCaregiverByChatId,
   getLastFeedTime,
   insertFeed,
   insertWeight,
 } from "../db/queries.js";
 import { computeIntakeStatus, formatIntakeStatus } from "../lib/intake.js";
+import { formatInAppTz } from "../lib/time.js";
 
 const CLARIFY_REPLY =
   "Sorry, I didn't catch that. Try something like \"120ml formula 8am\" or \"4.2kg\".";
 
-export async function handleIncomingMessage(fromPhone: string, rawText: string): Promise<string> {
-  const caregiver = await findCaregiverByPhone(fromPhone);
+export async function handleIncomingMessage(chatId: string, rawText: string): Promise<string> {
+  const caregiver = await findCaregiverByChatId(chatId);
   if (!caregiver) {
-    return "This number isn't registered as a caregiver yet. Ask the family admin to add you.";
+    return `This chat isn't registered as a caregiver yet. Your chat ID is ${chatId} — ask the family admin to add you.`;
   }
 
   const baby = await findBabyForCaregiver(caregiver.id);
@@ -103,7 +104,7 @@ async function handleQuery(babyId: string, birthDate: string): Promise<string> {
   const status = await computeIntakeStatus(babyId, birthDate);
   const lastFeed = await getLastFeedTime(babyId);
   const lastFeedLine = lastFeed
-    ? `Last feed: ${new Date(lastFeed).toLocaleString()}`
+    ? `Last feed: ${formatInAppTz(lastFeed)}`
     : "No feeds logged yet.";
 
   return `${formatIntakeStatus(status)}\n${lastFeedLine}`;

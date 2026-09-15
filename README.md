@@ -1,6 +1,6 @@
 # nomu
 
-WhatsApp baby feed tracker. See `tech-doc.md` for the full design.
+Baby feed tracker over Telegram. See `tech-doc.md` for the original design (written for WhatsApp; the project pivoted to Telegram — see note at the top of that doc — but the parsing/DB/calculation logic is unchanged).
 
 ## Setup
 
@@ -9,27 +9,29 @@ WhatsApp baby feed tracker. See `tech-doc.md` for the full design.
    - Copy the connection string (Session pooler, port 5432) into `.env` as `DATABASE_URL`.
    - Run migrations: `npm run migrate`
 
-2. **Meta WhatsApp Cloud API**
-   - Create a Meta app, add the WhatsApp product, use the free test number.
-   - Set `WHATSAPP_TOKEN` (temporary or system-user token) and `WHATSAPP_PHONE_NUMBER_ID` in `.env`.
-   - Set `WHATSAPP_VERIFY_TOKEN` in `.env` to any string of your choosing.
-   - In the Meta app dashboard, configure the webhook URL to `https://<your-host>/webhook` with that same verify token.
-   - Add up to 5 recipient numbers as verified testers (family members).
+2. **Telegram bot**
+   - Open Telegram, message **@BotFather**, send `/newbot`, follow the prompts (choose a name and a unique `_bot`-suffixed username).
+   - BotFather replies with a token — put it in `.env` as `TELEGRAM_BOT_TOKEN`.
+   - No webhook, no public URL, no approval process — the app long-polls Telegram for updates.
 
 3. **Anthropic**
    - Set `ANTHROPIC_API_KEY` in `.env`.
 
-4. **Register your family** (phone-number-as-identity — no signup flow, insert rows directly):
+4. **Register your family**
+
+   Telegram identity is per-chat, not per-phone-number, so you need each caregiver's `chat_id` before seeding:
+   - Have each caregiver open a DM with your bot and send any message (e.g. "hi").
+   - Start the app (`npm run dev`) — if the chat isn't registered yet, the bot replies with that chat's ID.
+   - Insert rows:
 
    ```sql
    INSERT INTO babies (name, birth_date) VALUES ('Baby Name', '2026-01-01') RETURNING id;
 
-   INSERT INTO caregivers (phone_number, name) VALUES ('+15551234567', 'Mom') RETURNING id;
+   INSERT INTO caregivers (telegram_chat_id, name) VALUES ('<chat-id-from-bot-reply>', 'Mom') RETURNING id;
 
    INSERT INTO caregiver_baby (caregiver_id, baby_id, role) VALUES ('<caregiver-id>', '<baby-id>', 'parent');
    ```
-
-   `phone_number` must match the `from` field WhatsApp sends, which is the number in international format without a leading `+` (e.g. `15551234567`) — check your webhook logs on first message to confirm the exact format.
+   - Message the bot again — it should now log/respond normally.
 
 5. **Run**
 
@@ -37,10 +39,10 @@ WhatsApp baby feed tracker. See `tech-doc.md` for the full design.
    npm run dev
    ```
 
-   Expose it publicly for the Meta webhook during development, e.g. `ngrok http 3000`.
+   No tunnel needed for local dev — long polling works from anywhere with outbound internet.
 
 ## Open decisions still pending (see tech-doc.md §7)
 
-- Rate-limiting the webhook
+- Rate-limiting the poller/handler
 - Undo/correction flow for bad log entries
 - Confirming intake guideline numbers with a pediatrician before relying on them

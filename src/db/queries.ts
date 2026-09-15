@@ -1,8 +1,9 @@
 import { pool } from "./pool.js";
+import { localDayBoundsUtc } from "../lib/time.js";
 
 export interface Caregiver {
   id: string;
-  phone_number: string;
+  telegram_chat_id: string;
   name: string | null;
 }
 
@@ -13,10 +14,10 @@ export interface Baby {
   sex: string | null;
 }
 
-export async function findCaregiverByPhone(phoneNumber: string): Promise<Caregiver | null> {
+export async function findCaregiverByChatId(chatId: string): Promise<Caregiver | null> {
   const { rows } = await pool.query<Caregiver>(
-    "SELECT id, phone_number, name FROM caregivers WHERE phone_number = $1",
-    [phoneNumber],
+    "SELECT id, telegram_chat_id, name FROM caregivers WHERE telegram_chat_id = $1",
+    [chatId],
   );
   return rows[0] ?? null;
 }
@@ -96,12 +97,13 @@ export async function getGuidelineForAge(ageDays: number) {
 }
 
 export async function getTodayTotalMl(babyId: string) {
+  const { startUtc, endUtc } = localDayBoundsUtc();
   const { rows } = await pool.query<{ total: string | null }>(
     `SELECT SUM(amount_ml) AS total FROM feeds
      WHERE baby_id = $1
-       AND started_at::date = CURRENT_DATE
+       AND started_at >= $2 AND started_at < $3
        AND feed_type != 'breastfeeding_direct'`,
-    [babyId],
+    [babyId, startUtc, endUtc],
   );
   return rows[0]?.total ? Number(rows[0].total) : 0;
 }
@@ -121,7 +123,7 @@ export async function getAllBabyIds(): Promise<string[]> {
 
 export async function getCaregiversForBaby(babyId: string): Promise<Caregiver[]> {
   const { rows } = await pool.query<Caregiver>(
-    `SELECT c.id, c.phone_number, c.name FROM caregivers c
+    `SELECT c.id, c.telegram_chat_id, c.name FROM caregivers c
      JOIN caregiver_baby cb ON cb.caregiver_id = c.id
      WHERE cb.baby_id = $1`,
     [babyId],
